@@ -1,0 +1,52 @@
+{
+  "skill": "cyrus-skill-generator",
+  "trigger_tests": {
+    "should_trigger": [
+      "Create a skill that drafts release notes from merged PRs since the last tag",
+      "Turn the debugging steps we just did into a reusable skill I can use in Codex and Copilot too",
+      "Can you review my SKILL.md and fix whatever breaks it in Copilot?",
+      "Scaffold a new skill for running our database migrations safely"
+    ],
+    "should_not_trigger": [
+      "Add a new slash command option to our CLI's argument parser",
+      "What skills should I learn to become a staff engineer?"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "new-skill-in-cyrus-pal",
+      "prompt": "Create a skill that summarises a GitHub PR's diff and open review comments into a short status report.",
+      "files": [],
+      "expected_behavior": [
+        "Asks at most one round of clarifying questions, each with a proposed default",
+        "Names the skill with the cyrus- prefix (e.g. cyrus-summarizing-prs) and places it in skills/<name>/ when run inside cyrus-pal",
+        "Scaffolds with scripts/init_skill.py instead of writing the folder by hand",
+        "Writes a third-person description containing what it does and 'Use when ...' triggers",
+        "Uses only spec frontmatter fields unless it explains why an extension is needed",
+        "Runs scripts/validate_skill.py and repeats until it passes",
+        "Fills evals/evals.json and adds a row to the AGENTS.md skills index"
+      ]
+    },
+    {
+      "id": "port-existing-skill",
+      "prompt": "This skill uses $ARGUMENTS and ${CLAUDE_SKILL_DIR} and works in Claude Code. Make it work in Codex and Copilot too.",
+      "files": ["a third-party SKILL.md that uses Claude Code-only substitutions"],
+      "expected_behavior": [
+        "Runs the validator with --no-prefix-check and reports the Claude Code-only syntax warnings",
+        "Replaces substitutions with plain-language instructions and paths relative to the skill directory",
+        "Keeps the skill name unchanged and bumps metadata.version",
+        "Re-runs the validator until it passes"
+      ]
+    },
+    {
+      "id": "user-only-side-effect-skill",
+      "prompt": "Make a skill that deploys the staging environment. It should only ever run when I explicitly ask.",
+      "files": [],
+      "expected_behavior": [
+        "Sets disable-model-invocation: true and explains it breaks claude.ai and API upload",
+        "Creates agents/openai.yaml with policy.allow_implicit_invocation: false for Codex",
+        "Uses exact, low-freedom commands for the deploy step with a verification step"
+      ]
+    }
+  ]
+}

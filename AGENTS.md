@@ -12,7 +12,7 @@ Entry point for AI agents working in this repo. Use it as a map. Details live in
 | --- | --- |
 | Understand the repo layout and the skill format | [README.md](README.md) |
 | Use or change an existing skill | `skills/<skill-name>/SKILL.md` (see the index below) |
-| Add a new skill | [README.md#skills](README.md#skills), then add a row to the index below |
+| Add a new skill | Use `cyrus-skill-generator` (see the index below), then add a row to the index |
 
 ## Skills index
 
@@ -20,7 +20,7 @@ Each skill is self-contained in `skills/<skill-name>/`, and `SKILL.md` is its en
 
 | Skill | Use when | Entry point |
 | --- | --- | --- |
-| _(none yet)_ | | |
+| `cyrus-skill-generator` | Creating, updating, validating or porting a skill (SKILL.md) for Claude Code, Copilot or Codex | [skills/cyrus-skill-generator/SKILL.md](skills/cyrus-skill-generator/SKILL.md) |
 
 Keep this table in sync with `skills/`. Add, rename or remove a row in the same change that adds, renames or removes a skill folder.
 

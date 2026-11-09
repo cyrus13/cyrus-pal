@@ -1,6 +1,6 @@
 # cyrus-pal
 
-A personal collection of tools for agentic development: reusable building blocks that make AI coding agents (such as Claude Code) more capable and consistent.
+A personal collection of tools for agentic development: reusable building blocks that make AI coding agents (Claude Code, GitHub Copilot and OpenAI Codex) more capable and consistent.
 
 ## Repository layout
 
@@ -19,22 +19,25 @@ More tool types (for example commands, hooks or agent definitions) may be added 
 
 The [`skills/`](skills/) folder contains agent skills. A skill is a packaged set of instructions, plus optional scripts and reference files, that an agent loads when a task matches its description.
 
-Each skill lives in its own folder and has a `SKILL.md` entry point:
+Skills follow the open [Agent Skills](https://agentskills.io/specification) format, so the same folder works in Claude Code, GitHub Copilot and OpenAI Codex. Each skill lives in its own folder and has a `SKILL.md` entry point:
 
 ```
 skills/
-└── my-skill/
+└── cyrus-my-skill/
     ├── SKILL.md       # Required: frontmatter + instructions
-    ├── scripts/       # Optional: helper scripts the skill runs
-    └── references/    # Optional: extra docs loaded on demand
+    ├── scripts/       # Optional: code the agent runs
+    ├── references/    # Optional: extra docs loaded on demand
+    ├── assets/        # Optional: templates and static files
+    ├── agents/        # Optional: openai.yaml (Codex UI and invocation policy)
+    └── evals/         # Optional: evals.json (trigger tests and scenarios)
 ```
 
 A minimal `SKILL.md`:
 
 ```markdown
 ---
-name: my-skill
-description: One or two sentences on what the skill does and when the agent should use it.
+name: cyrus-my-skill
+description: One or two sentences on what the skill does. Use when the user asks to ...
 ---
 
 # My Skill
@@ -42,24 +45,49 @@ description: One or two sentences on what the skill does and when the agent shou
 Step-by-step instructions for the agent.
 ```
 
-### Using the skills with Claude Code
+### Available skills
 
-To make a skill available to Claude Code, link or copy its folder into a skills directory:
+| Skill | What it does |
+| --- | --- |
+| [`cyrus-skill-generator`](skills/cyrus-skill-generator/SKILL.md) | Creates, updates and validates portable skills for Claude Code, Copilot and Codex. Includes scaffolding (`init_skill.py`) and a cross-tool validator (`validate_skill.py`). |
 
-- **Personal (all projects):** `~/.claude/skills/`
-- **Per project:** `<project>/.claude/skills/`
+### Creating a skill
+
+Use the generator: in Claude Code or Copilot type `/cyrus-skill-generator`, and in Codex type `$cyrus-skill-generator`. You can also just describe the skill you want, and the agent will load the generator by itself. To validate a skill by hand:
 
 ```bash
-# Example: symlink one skill for personal use
-ln -s "$(pwd)/skills/my-skill" ~/.claude/skills/my-skill
+python3 skills/cyrus-skill-generator/scripts/validate_skill.py skills/<skill-name>
 ```
 
-Symlinking keeps the installed skill in sync with this repo.
+### Installing the skills
+
+Each tool reads skills from a different folder, so symlink each skill into the folders for the tools you use. Symlinks keep the installed copy in sync with this repo.
+
+| Tool | Personal folder | Project folder |
+| --- | --- | --- |
+| Claude Code | `~/.claude/skills/` | `.claude/skills/` |
+| OpenAI Codex | `~/.agents/skills/` | `.agents/skills/` |
+| GitHub Copilot | `~/.agents/skills/` or `~/.copilot/skills/` | `.agents/skills/`, `.github/skills/` or `.claude/skills/` |
+
+```bash
+# From the root of this repo. Install one skill for all three tools (personal scope):
+mkdir -p ~/.claude/skills ~/.agents/skills
+ln -s "$(pwd)/skills/cyrus-skill-generator" ~/.claude/skills/cyrus-skill-generator   # Claude Code
+ln -s "$(pwd)/skills/cyrus-skill-generator" ~/.agents/skills/cyrus-skill-generator   # Codex + Copilot
+
+# Uninstall: remove the symlinks (this doesn't touch the repo copy)
+rm ~/.claude/skills/cyrus-skill-generator ~/.agents/skills/cyrus-skill-generator
+```
+
+Some Copilot surfaces read both `~/.agents/skills/` and `~/.claude/skills/`, so a skill may show up twice. The duplicate is harmless. Reload or restart the tool if a new skill doesn't appear: run `/skills reload` in Copilot CLI, or restart Codex.
+
+> **Planned:** a cross-platform installer (for example an `npx` command) that installs skills into every tool's folder in one step. This still needs research.
 
 ## Contributing
 
 - Branch off `main` and open a pull request against `main`. Don't push directly to it.
-- Keep each skill self-contained in its own folder under `skills/`.
+- Name every skill with the `cyrus-` prefix, and keep each skill self-contained in its own folder under `skills/`.
+- Run `validate_skill.py` on a skill before opening a PR.
 - When you add, rename or remove a skill, update the skills index in [`AGENTS.md`](AGENTS.md).
 - Write a clear `description` in each skill's frontmatter, since agents use it to decide when to load the skill.
 

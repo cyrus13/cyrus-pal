@@ -1,0 +1,24 @@
+{
+  "skill": "{{name}}",
+  "trigger_tests": {
+    "should_trigger": [
+      "TODO: realistic prompt 1 that should load the skill without naming it",
+      "TODO: realistic prompt 2",
+      "TODO: realistic prompt 3"
+    ],
+    "should_not_trigger": [
+      "TODO: near-miss prompt that shares keywords but needs something else"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "basic",
+      "prompt": "TODO: a realistic end-to-end request",
+      "files": [],
+      "expected_behavior": [
+        "TODO: observable outcome 1",
+        "TODO: observable outcome 2"
+      ]
+    }
+  ]
+}
