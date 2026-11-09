@@ -53,7 +53,15 @@ Step-by-step instructions for the agent.
 
 ### Creating a skill
 
-Use the generator: in Claude Code or Copilot type `/cyrus-skill-generator`, and in Codex type `$cyrus-skill-generator`. You can also just describe the skill you want, and the agent will load the generator by itself. To validate a skill by hand:
+Use the generator: in Claude Code or Copilot type `/cyrus-skill-generator`, and in Codex type `$cyrus-skill-generator`. You can also just describe the skill you want, and the agent will load the generator by itself. It always asks for three things:
+
+- the **name** (prefixed with `cyrus-`)
+- the **invocation** mode: *implicit* (the agent loads it when relevant), *explicit* (only when you invoke it by name) or *background* (the agent loads it, but it's hidden from menus)
+- the **target platforms**: Claude Code, Copilot and/or Codex, plus claude.ai / API upload
+
+It then writes the right settings for each platform and records your choices in the skill's `metadata` as `cyrus-invocation` and `cyrus-platforms`, so the validator can tailor its checks.
+
+To validate a skill by hand:
 
 ```bash
 python3 skills/cyrus-skill-generator/scripts/validate_skill.py skills/<skill-name>

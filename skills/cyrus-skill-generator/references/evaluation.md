@@ -49,7 +49,7 @@ Useful split: one agent session writes the skill, and a separate fresh session u
 
 In a fresh session, for each prompt:
 
-- **`should_trigger`:** the skill should load without being named. Check that the tool shows the skill being used.
+- **`should_trigger`:** the skill should load without being named. Check that the tool shows the skill being used. For explicit skills (`cyrus-invocation: explicit`), reverse this: confirm the skill does **not** auto-load on these prompts.
 - **`should_not_trigger`:** the skill should not load.
 
 Fixes:
@@ -60,7 +60,7 @@ Fixes:
 
 ## Scenario tests
 
-Invoke the skill explicitly (`/<name>` or `$<name>`) with each scenario prompt, then check each `expected_behavior` item. Also check:
+Invoke the skill explicitly (`/<name>` or `$<name>`) on each target platform recorded in `metadata.cyrus-platforms`, with each scenario prompt, then check each `expected_behavior` item. Also check:
 
 - Did the agent read only the references it needed?
 - Did it run scripts instead of rewriting them?

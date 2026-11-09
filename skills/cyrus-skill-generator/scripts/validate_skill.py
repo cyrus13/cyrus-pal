@@ -2,13 +2,19 @@
 """Validate an Agent Skill folder for spec compliance and cross-tool portability.
 
 Usage:
-  python3 validate_skill.py <skill-dir> [--strict] [--no-prefix-check]
+  python3 validate_skill.py <skill-dir> [--strict] [--third-party]
 
 Checks the Agent Skills spec (agentskills.io) plus the stricter rules of
 Claude Code, GitHub Copilot, OpenAI Codex and claude.ai uploads:
 frontmatter fields and limits, naming, description quality, body size,
 tool-specific syntax, leftover placeholders, broken or missing resource
 links, nested references, and the optional Codex agents/openai.yaml.
+
+Checks are tailored to the skill's recorded choices in metadata:
+  cyrus-platforms:  space-separated targets (claude-code copilot codex claude-api)
+  cyrus-invocation: implicit | explicit | background
+Without them, all of claude-code, copilot and codex are assumed.
+--third-party skips the cyrus conventions (prefix, recorded choices).
 
 Prints ERROR / WARN lines. Exit code: 1 if any ERROR (or any WARN with
 --strict), otherwise 0. Standard library only.
@@ -35,25 +41,40 @@ PREFIX = "cyrus-"
 RESERVED_WORDS = ("claude", "anthropic")
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
+PLATFORMS = ("claude-code", "copilot", "codex", "claude-api")
+DEFAULT_TARGETS = {"claude-code", "copilot", "codex"}
+INVOCATIONS = ("implicit", "explicit", "background")
+FRONTMATTER_INVOCATION_PLATFORMS = {"claude-code", "copilot"}  # read disable-model-invocation / user-invocable
+
 SPEC_FIELDS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
-# Non-spec fields with known support. claude.ai uploads and the Claude API reject all of them.
-EXTENSION_FIELDS = {
-    "disable-model-invocation": "Claude Code + VS Code Copilot (mirror in agents/openai.yaml for Codex)",
-    "user-invocable": "Claude Code + VS Code Copilot",
-    "argument-hint": "Claude Code + VS Code Copilot",
-    "context": "Claude Code + VS Code Copilot (experimental)",
-    "when_to_use": "Claude Code only (fold it into description)",
-    "paths": "Claude Code only",
-    "arguments": "Claude Code only",
-    "disallowed-tools": "Claude Code only",
-    "model": "Claude Code only",
-    "effort": "Claude Code only",
-    "agent": "Claude Code only",
-    "background": "Claude Code only",
-    "hooks": "Claude Code only",
-    "shell": "Claude Code only",
+# Non-spec fields -> platforms that act on them. claude.ai uploads and the Claude API reject all of them.
+CC_COPILOT = {"claude-code", "copilot"}
+CC = {"claude-code"}
+EXTENSION_SUPPORT = {
+    "disable-model-invocation": CC_COPILOT,
+    "user-invocable": CC_COPILOT,
+    "argument-hint": CC_COPILOT,
+    "context": CC_COPILOT,
+    "when_to_use": CC,
+    "paths": CC,
+    "arguments": CC,
+    "disallowed-tools": CC,
+    "model": CC,
+    "effort": CC,
+    "agent": CC,
+    "background": CC,
+    "hooks": CC,
+    "shell": CC,
 }
+EXTENSION_HINTS = {
+    "when_to_use": "; fold it into description",
+    "paths": "; name the file types in description instead",
+    "argument-hint": "; describe the expected input in the body",
+}
+# Invocation fields are checked against cyrus-invocation instead of per-platform support.
+INVOCATION_FIELDS = {"disable-model-invocation", "user-invocable"}
 OPENAI_YAML_KEYS = {"interface", "policy", "dependencies"}
+PLATFORM_LABELS = {"claude-code": "Claude Code", "copilot": "Copilot", "codex": "Codex", "claude-api": "claude.ai/API"}
 
 RESOURCE_DIRS = ("scripts", "references", "assets")
 TEXT_SUFFIXES = {".md", ".py", ".sh", ".js", ".mjs", ".ts", ".json", ".yaml", ".yml", ".txt", ".toml"}
@@ -228,6 +249,48 @@ def as_text(value):
     return None
 
 
+def flag(value):
+    """Return True/False for YAML-style booleans, None if absent or not boolean."""
+    text = (as_text(value) or "").strip().lower()
+    if text in ("true", "yes", "on", "1"):
+        return True
+    if text in ("false", "no", "off", "0"):
+        return False
+    return None
+
+
+def labels(platforms):
+    return ", ".join(PLATFORM_LABELS[p] for p in PLATFORMS if p in platforms)
+
+
+def read_choices(fm, report, conventions):
+    """Return (targets, invocation) from metadata.cyrus-platforms / cyrus-invocation."""
+    meta = fm.get("metadata") if isinstance(fm.get("metadata"), dict) else {}
+    targets = set(DEFAULT_TARGETS)
+    raw = meta.get("cyrus-platforms")
+    if raw is None:
+        if conventions:
+            report.warn("metadata.cyrus-platforms is missing; record the target platforms, e.g. "
+                        "cyrus-platforms: \"claude-code copilot codex\" (assuming those three)")
+    else:
+        given = set(raw.split())
+        unknown = given - set(PLATFORMS)
+        if unknown or not given:
+            report.error(f"metadata.cyrus-platforms has unknown or no values {sorted(unknown)}; "
+                         f"use a space-separated subset of: {' '.join(PLATFORMS)}")
+        if given & set(PLATFORMS):
+            targets = given & set(PLATFORMS)
+
+    invocation = meta.get("cyrus-invocation")
+    if invocation is None:
+        if conventions:
+            report.warn("metadata.cyrus-invocation is missing; record implicit, explicit or background")
+    elif invocation not in INVOCATIONS:
+        report.error(f"metadata.cyrus-invocation '{invocation}' must be one of: {', '.join(INVOCATIONS)}")
+        invocation = None
+    return targets, invocation
+
+
 def check_name(fm, skill_dir, report, prefix_check):
     name = as_text(fm.get("name"))
     dir_name = os.path.basename(os.path.abspath(skill_dir))
@@ -245,11 +308,11 @@ def check_name(fm, skill_dir, report, prefix_check):
         if word in name:
             report.error(f"name contains reserved word '{word}' (rejected by claude.ai and the Claude API)")
     if prefix_check and not name.startswith(PREFIX):
-        report.warn(f"name should start with '{PREFIX}' (cyrus-pal convention); pass --no-prefix-check for third-party skills")
+        report.warn(f"name should start with '{PREFIX}' (cyrus-pal convention); pass --third-party for third-party skills")
     return name
 
 
-def check_description(fm, report):
+def check_description(fm, report, invocation):
     desc = fm.get("description")
     text = as_text(desc)
     if desc is None or not (text or "").strip():
@@ -266,14 +329,14 @@ def check_description(fm, report):
         report.warn(f"description is only {len(text)} chars; say what the skill does and when to use it")
     if FIRST_SECOND_PERSON_RE.search(text):
         report.warn("description should be third person ('Generates X...'), not 'I'/'You'/'We'")
-    if not TRIGGER_CUE_RE.search(text):
+    if invocation != "explicit" and not TRIGGER_CUE_RE.search(text):
         report.warn("description should say when to use the skill, e.g. 'Use when the user asks to ...'")
     extra = as_text(fm.get("when_to_use")) or ""
     if len(text) + len(extra) > CLAUDE_LISTING_CAP:
         report.warn(f"description + when_to_use exceed {CLAUDE_LISTING_CAP} chars; Claude Code truncates the listing")
 
 
-def check_optional_fields(fm, report):
+def check_optional_fields(fm, report, targets):
     compat = fm.get("compatibility")
     if compat is not None:
         text = as_text(compat)
@@ -304,14 +367,22 @@ def check_optional_fields(fm, report):
             report.warn(f"'{key}' uses nested YAML this validator does not check; keep frontmatter simple")
         if key in SPEC_FIELDS:
             continue
-        if key in EXTENSION_FIELDS:
-            report.warn(f"'{key}' is not in the Agent Skills spec - supported by {EXTENSION_FIELDS[key]}; "
-                        "claude.ai uploads and the Claude API reject it")
+        if "claude-api" in targets:
+            report.error(f"'{key}' is not an Agent Skills spec field; claude.ai uploads and the Claude API "
+                         "reject it (claude-api is a target platform)")
+            continue
+        if key in INVOCATION_FIELDS:
+            continue  # checked against cyrus-invocation in check_invocation
+        if key in EXTENSION_SUPPORT:
+            ignored_by = targets - EXTENSION_SUPPORT[key]
+            if ignored_by:
+                report.warn(f"'{key}' is ignored by {labels(ignored_by)} (supported only by "
+                            f"{labels(EXTENSION_SUPPORT[key])}){EXTENSION_HINTS.get(key, '')}")
         else:
-            report.warn(f"unknown field '{key}': ignored by Claude Code, rejected by claude.ai and the Claude API")
+            report.warn(f"unknown field '{key}': not in the spec or any target's docs; tools ignore or reject it")
 
 
-def check_body(body, report):
+def check_body(body, report, targets):
     lines = body.splitlines()
     if not body.strip():
         report.error("SKILL.md body is empty; add the instructions")
@@ -321,12 +392,15 @@ def check_body(body, report):
     tokens = len(body) // CHARS_PER_TOKEN
     if tokens > MAX_BODY_TOKENS:
         report.warn(f"body is ~{tokens} tokens; the spec recommends under {MAX_BODY_TOKENS}")
+    non_claude = targets - {"claude-code"}
     for pattern, label in CLAUDE_ONLY_RE:
-        if pattern.search(body):
-            report.warn(f"body uses Claude Code-only {label}; Copilot and Codex see it as literal text - "
+        if non_claude and pattern.search(body):
+            report.warn(f"body uses Claude Code-only {label}; {labels(non_claude)} see it as literal text - "
                         "add a plain-language fallback or remove it")
-    if COPILOT_ONLY_RE.search(body):
-        report.warn("body uses Copilot-only '#file:' references; use Markdown links instead")
+    non_copilot = targets - {"copilot"}
+    if non_copilot and COPILOT_ONLY_RE.search(body):
+        report.warn(f"body uses Copilot-only '#file:' references, which {labels(non_copilot)} ignore; "
+                    "use Markdown links instead")
 
 
 def check_placeholders(text, where, report, level="error"):
@@ -434,29 +508,70 @@ def check_resources(skill_dir, body, report):
                         "link it or delete it)")
 
 
-def check_openai_yaml(skill_dir, fm, report):
+def read_openai_yaml(skill_dir, targets, report):
+    """Lint agents/openai.yaml; return True if it disables implicit invocation."""
     path = skill_dir / "agents" / "openai.yaml"
-    implicit_off = False
-    if path.exists():
-        text = path.read_text(encoding="utf-8")
-        for lineno, line in enumerate(text.splitlines(), 1):
-            m = re.match(r"^([A-Za-z0-9_-]+):", line)
-            if m and m.group(1) not in OPENAI_YAML_KEYS:
-                report.warn(f"agents/openai.yaml line {lineno}: unknown top-level key '{m.group(1)}' "
-                            f"(documented: {', '.join(sorted(OPENAI_YAML_KEYS))})")
-        implicit_off = bool(re.search(r"^\s+allow_implicit_invocation:\s*false\b", text, re.M))
-        check_placeholders(text, "agents/openai.yaml", report)
-    dmi = as_text(fm.get("disable-model-invocation")) or ""
-    dmi_on = dmi.lower() in ("true", "yes", "on", "1")
-    if dmi_on and not implicit_off:
-        report.warn("disable-model-invocation is true but Codex will still auto-invoke; "
-                    "set policy.allow_implicit_invocation: false in agents/openai.yaml")
-    if implicit_off and not dmi_on:
-        report.warn("agents/openai.yaml disables implicit invocation but SKILL.md does not; "
-                    "add disable-model-invocation: true for Claude Code and Copilot")
+    if not path.exists():
+        return False
+    if "codex" not in targets:
+        report.warn("agents/openai.yaml is only read by Codex, which is not a target platform; remove it "
+                    "or add codex to metadata.cyrus-platforms")
+    text = path.read_text(encoding="utf-8")
+    for lineno, line in enumerate(text.splitlines(), 1):
+        m = re.match(r"^([A-Za-z0-9_-]+):", line)
+        if m and m.group(1) not in OPENAI_YAML_KEYS:
+            report.warn(f"agents/openai.yaml line {lineno}: unknown top-level key '{m.group(1)}' "
+                        f"(documented: {', '.join(sorted(OPENAI_YAML_KEYS))})")
+    check_placeholders(text, "agents/openai.yaml", report)
+    return bool(re.search(r"^\s+allow_implicit_invocation:\s*false\b", text, re.M))
 
 
-def check_evals(skill_dir, report):
+def check_invocation(skill_dir, fm, invocation, targets, report):
+    """Make each target platform's invocation settings agree with the chosen mode."""
+    implicit_off = read_openai_yaml(skill_dir, targets, report)
+    dmi_on = flag(fm.get("disable-model-invocation")) is True
+    hidden = flag(fm.get("user-invocable")) is False
+    fm_targets = targets & FRONTMATTER_INVOCATION_PLATFORMS
+    codex = "codex" in targets
+    yaml_fix = "set policy.allow_implicit_invocation: false in agents/openai.yaml"
+
+    if invocation is None:  # choice not recorded: only check the platforms agree with each other
+        if dmi_on and codex and not implicit_off:
+            report.warn(f"disable-model-invocation is true but Codex will still auto-invoke; {yaml_fix}")
+        if implicit_off and not dmi_on and fm_targets:
+            report.warn(f"agents/openai.yaml disables implicit invocation but {labels(fm_targets)} will "
+                        "still auto-load; add disable-model-invocation: true")
+        return
+
+    if invocation != "implicit" and "claude-api" in targets:
+        report.error(f"'{invocation}' invocation is not possible on claude.ai/API uploads; "
+                     "drop claude-api from cyrus-platforms or use implicit")
+    if invocation == "explicit":
+        if fm_targets and not dmi_on:
+            report.error(f"explicit invocation needs disable-model-invocation: true for {labels(fm_targets)}")
+        if codex and not implicit_off:
+            report.error(f"explicit invocation needs Codex support: {yaml_fix}")
+        if hidden:
+            report.error("explicit skills must not set user-invocable: false (nobody could invoke them)")
+    elif invocation == "background":
+        if fm_targets and not hidden:
+            report.error(f"background invocation needs user-invocable: false for {labels(fm_targets)}")
+        if dmi_on or implicit_off:
+            report.error("background skills must allow implicit invocation (otherwise nothing can load them)")
+        if codex:
+            report.warn("Codex has no hidden mode: this skill stays visible there")
+    else:  # implicit
+        if dmi_on:
+            report.error("disable-model-invocation: true contradicts cyrus-invocation: implicit; "
+                         "remove it or change cyrus-invocation to explicit")
+        if hidden:
+            report.error("user-invocable: false contradicts cyrus-invocation: implicit; "
+                         "remove it or change cyrus-invocation to background")
+        if implicit_off:
+            report.error("agents/openai.yaml disables implicit invocation, contradicting cyrus-invocation: implicit")
+
+
+def check_evals(skill_dir, report, invocation):
     path = skill_dir / "evals" / "evals.json"
     if not path.exists():
         report.warn("no evals/evals.json; add trigger tests and scenarios (see references on evaluation)")
@@ -468,11 +583,11 @@ def check_evals(skill_dir, report):
         return
     check_placeholders(json.dumps(data), "evals/evals.json", report, level="warn")
     triggers = data.get("trigger_tests", {}) if isinstance(data, dict) else {}
-    if len(triggers.get("should_trigger", [])) < 3:
+    if invocation != "explicit" and len(triggers.get("should_trigger", [])) < 3:
         report.warn("evals/evals.json: add at least 3 should_trigger prompts")
 
 
-def validate(skill_dir, prefix_check=True):
+def validate(skill_dir, conventions=True):
     report = Report()
     skill_md = skill_dir / "SKILL.md"
     if not skill_dir.is_dir():
@@ -513,15 +628,17 @@ def validate(skill_dir, prefix_check=True):
         return report
     body = "\n".join(lines[end + 1 :])
 
-    check_name(fm, skill_dir, report, prefix_check)
-    check_description(fm, report)
-    check_optional_fields(fm, report)
+    targets, invocation = read_choices(fm, report, conventions)
+    check_name(fm, skill_dir, report, conventions)
+    check_description(fm, report, invocation)
+    check_optional_fields(fm, report, targets)
     check_placeholders("\n".join(lines[: end + 1]), "frontmatter", report)
     check_placeholders(body, "SKILL.md body", report)
-    check_body(body, report)
+    check_body(body, report, targets)
     check_resources(skill_dir, body, report)
-    check_openai_yaml(skill_dir, fm, report)
-    check_evals(skill_dir, report)
+    check_invocation(skill_dir, fm, invocation, targets, report)
+    check_evals(skill_dir, report, invocation)
+    report.targets, report.invocation = targets, invocation
     return report
 
 
@@ -529,18 +646,22 @@ def main():
     parser = argparse.ArgumentParser(description="Validate an Agent Skill folder.")
     parser.add_argument("skill_dir", help="path to the skill folder (the one containing SKILL.md)")
     parser.add_argument("--strict", action="store_true", help="treat warnings as errors")
-    parser.add_argument("--no-prefix-check", action="store_true", help="skip the cyrus- name prefix check")
+    parser.add_argument("--third-party", "--no-prefix-check", dest="third_party", action="store_true",
+                        help="skip cyrus conventions (cyrus- prefix, recorded platforms/invocation)")
     args = parser.parse_args()
 
     skill_dir = Path(args.skill_dir).expanduser()
-    report = validate(skill_dir, prefix_check=not args.no_prefix_check)
+    report = validate(skill_dir, conventions=not args.third_party)
     for msg in report.errors:
         print(f"ERROR  {msg}")
     for msg in report.warnings:
         print(f"WARN   {msg}")
     failed = bool(report.errors) or (args.strict and bool(report.warnings))
     status = "FAIL" if failed else "PASS"
-    print(f"{status}  {skill_dir}: {len(report.errors)} error(s), {len(report.warnings)} warning(s)")
+    scope = ""
+    if hasattr(report, "targets"):
+        scope = f" [targets: {labels(report.targets)}; invocation: {report.invocation or 'unrecorded'}]"
+    print(f"{status}  {skill_dir}{scope}: {len(report.errors)} error(s), {len(report.warnings)} warning(s)")
     sys.exit(1 if failed else 0)
 
 

@@ -1,10 +1,12 @@
 ---
 name: {{name}}
 description: {{description}}
-license: MIT
+{{invocation_fields}}license: MIT
 metadata:
   author: cyrus13
   version: "0.1.0"
+  cyrus-platforms: "{{platforms}}"
+  cyrus-invocation: "{{invocation}}"
 ---
 
 # {{title}}

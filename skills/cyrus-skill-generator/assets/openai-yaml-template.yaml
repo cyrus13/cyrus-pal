@@ -7,8 +7,8 @@ interface:
   # brand_color: "#3B82F6"
   # default_prompt: "Use ${{name}} to ..."
 policy:
-  # Set to false for user-only skills, matching disable-model-invocation: true in SKILL.md.
-  allow_implicit_invocation: true
+  # false = explicit-only ($name), matching disable-model-invocation: true in SKILL.md.
+  allow_implicit_invocation: {{allow_implicit}}
 # dependencies:
 #   tools:
 #     - type: "mcp"
