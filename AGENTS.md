@@ -12,7 +12,7 @@ Entry point for AI agents working in this repo. Use it as a map. Details live in
 | --- | --- |
 | Understand the repo layout and the skill format | [README.md](README.md) |
 | Use or change an existing skill | `skills/<skill-name>/SKILL.md` (see the index below) |
-| Add a new skill | [README.md#skills](README.md#skills), then add a row to the index below |
+| Add a new skill | Use `cyrus-skill-generator` (see the index below), then add a row to the index |
 
 ## Skills index
 
@@ -20,7 +20,7 @@ Each skill is self-contained in `skills/<skill-name>/`, and `SKILL.md` is its en
 
 | Skill | Use when | Entry point |
 | --- | --- | --- |
-| _(none yet)_ | | |
+| `cyrus-skill-generator` | Creating, updating, validating or porting a skill (SKILL.md) for Claude Code, Copilot or Codex | [skills/cyrus-skill-generator/SKILL.md](skills/cyrus-skill-generator/SKILL.md) |
 
 Keep this table in sync with `skills/`. Add, rename or remove a row in the same change that adds, renames or removes a skill folder.
 
@@ -28,5 +28,6 @@ Keep this table in sync with `skills/`. Add, rename or remove a row in the same 
 
 - **Never commit straight to `main`.** Make a branch, push it, and open a PR against `main` (`gh pr create --base main`).
 - **One skill, one folder.** Don't share files across skill folders. If several skills need the same thing, raise it in the PR.
+- **Trace every skill.** Each skill, and each script it runs, prints a `[skill] <name>` line to the console. The format is defined under "Trace logging" in [skills/cyrus-skill-generator/references/authoring.md](skills/cyrus-skill-generator/references/authoring.md), and `validate_skill.py` enforces it.
 - **Descriptions matter.** A skill's frontmatter `description` decides when agents load it. Make it say what the skill does and when to use it.
 - **Update the maps.** When you add a new kind of tool (a new top-level folder), add it to "Where to look" here and to the layout section in [README.md](README.md).
