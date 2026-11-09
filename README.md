@@ -7,6 +7,8 @@ A personal collection of tools for agentic development: reusable building blocks
 ```
 cyrus-pal/
 ├── skills/        # Agent skills, one folder per skill
+├── AGENTS.md      # Map for AI agents: routes to skills and other files
+├── CLAUDE.md      # Claude Code entry point (imports AGENTS.md)
 ├── LICENSE
 └── README.md
 ```
@@ -58,6 +60,7 @@ Symlinking keeps the installed skill in sync with this repo.
 
 - Branch off `main` and open a pull request against `main`. Don't push directly to it.
 - Keep each skill self-contained in its own folder under `skills/`.
+- When you add, rename or remove a skill, update the skills index in [`AGENTS.md`](AGENTS.md).
 - Write a clear `description` in each skill's frontmatter, since agents use it to decide when to load the skill.
 
 ## License
