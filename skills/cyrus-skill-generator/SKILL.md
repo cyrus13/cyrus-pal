@@ -5,14 +5,14 @@ license: MIT
 compatibility: The bundled scripts need Python 3.8+ and use only the standard library. Targets Claude Code, GitHub Copilot and OpenAI Codex.
 metadata:
   author: cyrus13
-  version: "1.2.0"
+  version: "1.0.0"
   cyrus-platforms: "claude-code copilot codex"
   cyrus-invocation: "implicit"
 ---
 
 # Cyrus Skill Generator
 
-**Trace (do this first):** before anything else, print this exact line on its own: `[skill] cyrus-skill-generator v1.2.0 | started`. When the workflow ends, print `[skill] cyrus-skill-generator | finished`. If you stop early, print `[skill] cyrus-skill-generator | stopped: <reason>` instead.
+**Trace (do this first):** before anything else, print this exact line on its own: `[skill] cyrus-skill-generator v1.0.0 | started`. When the workflow ends, print `[skill] cyrus-skill-generator | finished`. If you stop early, print `[skill] cyrus-skill-generator | stopped: <reason>` instead.
 
 Builds skills that follow the open Agent Skills spec and load cleanly in Claude Code, GitHub Copilot and OpenAI Codex.
 

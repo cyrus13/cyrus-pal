@@ -18,7 +18,7 @@
       "prompt": "Create a skill that summarises a GitHub PR's diff and open review comments into a short status report.",
       "files": [],
       "expected_behavior": [
-        "Prints '[skill] cyrus-skill-generator v1.2.0 | started' before anything else and '[skill] cyrus-skill-generator | finished' at the end",
+        "Prints '[skill] cyrus-skill-generator v1.0.0 | started' before anything else and '[skill] cyrus-skill-generator | finished' at the end",
         "Asks, in one round, for the skill name (with a cyrus- suggestion), the invocation mode (implicit/explicit/background) and the target platforms (default Claude Code, Copilot, Codex), even though the prompt implies answers",
         "Places it in skills/<name>/ when run inside cyrus-pal",
         "Scaffolds with scripts/init_skill.py passing --invocation and --platforms instead of writing the folder by hand",

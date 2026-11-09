@@ -64,7 +64,7 @@ It then writes the right settings for each platform and records your choices in 
 Every cyrus skill prints **trace lines**, so the console shows which skill (and which version) is running:
 
 ```
-[skill] cyrus-skill-generator v1.2.0 | started
+[skill] cyrus-skill-generator v1.0.0 | started
 [skill] cyrus-skill-generator | scripts/validate_skill.py   # each script, on stderr
 [skill] cyrus-skill-generator | finished
 ```
