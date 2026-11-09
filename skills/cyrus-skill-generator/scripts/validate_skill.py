@@ -26,9 +26,15 @@ import re
 import sys
 from pathlib import Path
 
-# Limits from the Agent Skills spec (strictest values across the tools).
-MAX_NAME_LEN = 64
-MAX_DESCRIPTION_LEN = 1024
+sys.dont_write_bytecode = True  # keep __pycache__ out of the skill folder
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # find skill_rules.py even under python -I
+from skill_rules import (  # noqa: E402  (shared rules: skill_rules.py)
+    DEFAULT_PLATFORMS, FRONTMATTER_INVOCATION_PLATFORMS, INVOCATIONS, PLATFORMS, PREFIX, InvocationPlan,
+    description_problems, labels, name_problems,
+)
+
+# Limits from the Agent Skills spec (strictest values across the tools). Name and description limits
+# live in skill_rules.py.
 MAX_COMPATIBILITY_LEN = 500
 MAX_BODY_LINES = 500  # spec and Anthropic guidance: keep SKILL.md under 500 lines
 MAX_BODY_TOKENS = 5000  # spec recommendation for the activated body
@@ -40,14 +46,7 @@ TRACE_MAX_LINE = 15  # the trace instruction must come before the workflow, so t
 TRACE = "[skill] cyrus-skill-generator | scripts/validate_skill.py"
 SCRIPT_SUFFIXES = {".py", ".sh", ".bash", ".js", ".mjs", ".ts", ".ps1"}
 
-PREFIX = "cyrus-"
-RESERVED_WORDS = ("claude", "anthropic")
-NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-
-PLATFORMS = ("claude-code", "copilot", "codex", "claude-api")
-DEFAULT_TARGETS = {"claude-code", "copilot", "codex"}
-INVOCATIONS = ("implicit", "explicit", "background")
-FRONTMATTER_INVOCATION_PLATFORMS = {"claude-code", "copilot"}  # read disable-model-invocation / user-invocable
+DEFAULT_TARGETS = set(DEFAULT_PLATFORMS)
 
 SPEC_FIELDS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
 # Non-spec fields -> platforms that act on them. claude.ai uploads and the Claude API reject all of them.
@@ -77,7 +76,6 @@ EXTENSION_HINTS = {
 # Invocation fields are checked against cyrus-invocation instead of per-platform support.
 INVOCATION_FIELDS = {"disable-model-invocation", "user-invocable"}
 OPENAI_YAML_KEYS = {"interface", "policy", "dependencies"}
-PLATFORM_LABELS = {"claude-code": "Claude Code", "copilot": "Copilot", "codex": "Codex", "claude-api": "claude.ai/API"}
 
 RESOURCE_DIRS = ("scripts", "references", "assets")
 TEXT_SUFFIXES = {".md", ".py", ".sh", ".js", ".mjs", ".ts", ".json", ".yaml", ".yml", ".txt", ".toml"}
@@ -262,10 +260,6 @@ def flag(value):
     return None
 
 
-def labels(platforms):
-    return ", ".join(PLATFORM_LABELS[p] for p in PLATFORMS if p in platforms)
-
-
 def read_choices(fm, report, conventions):
     """Return (targets, invocation) from metadata.cyrus-platforms / cyrus-invocation."""
     meta = fm.get("metadata") if isinstance(fm.get("metadata"), dict) else {}
@@ -300,16 +294,10 @@ def check_name(fm, skill_dir, report, prefix_check):
     if not name:
         report.error("'name' is required by the spec, Copilot and Codex")
         return None
-    if not NAME_RE.match(name):
-        report.error(f"name '{name}': use lowercase a-z, 0-9 and single hyphens, no leading/trailing hyphen "
-                     "(Copilot silently skips invalid names)")
-    if len(name) > MAX_NAME_LEN:
-        report.error(f"name is {len(name)} chars; limit is {MAX_NAME_LEN}")
+    for problem in name_problems(name):
+        report.error(problem)
     if name != dir_name:
         report.error(f"name '{name}' must match its folder name '{dir_name}'")
-    for word in RESERVED_WORDS:
-        if word in name:
-            report.error(f"name contains reserved word '{word}' (rejected by claude.ai and the Claude API)")
     if prefix_check and not name.startswith(PREFIX):
         report.warn(f"name should start with '{PREFIX}' (cyrus-pal convention); pass --third-party for third-party skills")
     return name
@@ -324,10 +312,8 @@ def check_description(fm, report, invocation):
     if text is None:
         report.error("'description' must be a single string")
         return
-    if len(text) > MAX_DESCRIPTION_LEN:
-        report.error(f"description is {len(text)} chars; limit is {MAX_DESCRIPTION_LEN}")
-    if "<" in text or ">" in text:
-        report.error("description must not contain angle brackets (claude.ai rejects XML tags; Claude Code escapes them)")
+    for problem in description_problems(text):
+        report.error(problem)
     if len(text) < MIN_DESCRIPTION_LEN:
         report.warn(f"description is only {len(text)} chars; say what the skill does and when to use it")
     if FIRST_SECOND_PERSON_RE.search(text):
@@ -530,48 +516,46 @@ def read_openai_yaml(skill_dir, targets, report):
 
 
 def check_invocation(skill_dir, fm, invocation, targets, report):
-    """Make each target platform's invocation settings agree with the chosen mode."""
+    """Make each target platform's invocation settings agree with the chosen mode (see skill_rules.InvocationPlan)."""
     implicit_off = read_openai_yaml(skill_dir, targets, report)
     dmi_on = flag(fm.get("disable-model-invocation")) is True
     hidden = flag(fm.get("user-invocable")) is False
     fm_targets = targets & FRONTMATTER_INVOCATION_PLATFORMS
-    codex = "codex" in targets
     yaml_fix = "set policy.allow_implicit_invocation: false in agents/openai.yaml"
 
     if invocation is None:  # choice not recorded: only check the platforms agree with each other
-        if dmi_on and codex and not implicit_off:
+        if dmi_on and "codex" in targets and not implicit_off:
             report.warn(f"disable-model-invocation is true but Codex will still auto-invoke; {yaml_fix}")
         if implicit_off and not dmi_on and fm_targets:
             report.warn(f"agents/openai.yaml disables implicit invocation but {labels(fm_targets)} will "
                         "still auto-load; add disable-model-invocation: true")
         return
 
-    if invocation != "implicit" and "claude-api" in targets:
-        report.error(f"'{invocation}' invocation is not possible on claude.ai/API uploads; "
-                     "drop claude-api from cyrus-platforms or use implicit")
-    if invocation == "explicit":
-        if fm_targets and not dmi_on:
-            report.error(f"explicit invocation needs disable-model-invocation: true for {labels(fm_targets)}")
-        if codex and not implicit_off:
-            report.error(f"explicit invocation needs Codex support: {yaml_fix}")
-        if hidden:
-            report.error("explicit skills must not set user-invocable: false (nobody could invoke them)")
-    elif invocation == "background":
-        if fm_targets and not hidden:
-            report.error(f"background invocation needs user-invocable: false for {labels(fm_targets)}")
-        if dmi_on or implicit_off:
-            report.error("background skills must allow implicit invocation (otherwise nothing can load them)")
-        if codex:
-            report.warn("Codex has no hidden mode: this skill stays visible there")
-    else:  # implicit
-        if dmi_on:
-            report.error("disable-model-invocation: true contradicts cyrus-invocation: implicit; "
-                         "remove it or change cyrus-invocation to explicit")
-        if hidden:
-            report.error("user-invocable: false contradicts cyrus-invocation: implicit; "
-                         "remove it or change cyrus-invocation to background")
-        if implicit_off:
-            report.error("agents/openai.yaml disables implicit invocation, contradicting cyrus-invocation: implicit")
+    plan = InvocationPlan(invocation, targets)
+    if plan.error:
+        report.error(plan.error)
+    for note in plan.notes:
+        report.warn(note)
+    mode = f"cyrus-invocation: {invocation}"
+    checks = (
+        # (what the skill has, what the plan needs, field to set, mode that would need it)
+        (dmi_on, plan.disable_model_invocation, "disable-model-invocation: true", "explicit"),
+        (hidden, plan.user_invocable_false, "user-invocable: false", "background"),
+    )
+    for present, needed, field, other_mode in checks:
+        if needed and fm_targets and not present:
+            report.error(f"{mode} needs {field} for {labels(fm_targets)}")
+        elif present and not needed:
+            report.error(f"{field} contradicts {mode}; remove it or change cyrus-invocation to {other_mode}")
+    if plan.codex_implicit_off and not implicit_off:
+        report.error(f"{mode} needs Codex support: {yaml_fix}")
+    elif implicit_off and not plan.codex_implicit_off:
+        report.error(f"agents/openai.yaml disables implicit invocation, which contradicts {mode}")
+
+
+def is_entry_point(text):
+    """A script is run directly if it has a shebang or a Python __main__ guard."""
+    return text.startswith("#!") or "__name__ == \"__main__\"" in text or "__name__ == '__main__'" in text
 
 
 def check_trace(skill_dir, fm, body, report):
@@ -607,9 +591,10 @@ def check_trace(skill_dir, fm, body, report):
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
+            if not is_entry_point(text):
+                continue  # helper module that is only imported
             if f"[skill] {name}" not in text:
-                report.warn(f"{rel} does not print its trace line '[skill] {name} | {rel.as_posix()}' to stderr "
-                            "(fine for helper modules that are only imported)")
+                report.warn(f"{rel} does not print its trace line '[skill] {name} | {rel.as_posix()}' to stderr")
 
 
 def check_evals(skill_dir, report, invocation):

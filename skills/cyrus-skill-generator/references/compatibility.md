@@ -9,7 +9,6 @@ Verified against official docs on 2026-11-09. If a tool's behaviour seems to dif
 - [Frontmatter fields](#frontmatter-fields)
 - [Tool-specific extensions](#tool-specific-extensions)
 - [Body syntax](#body-syntax)
-- [Invocation](#invocation)
 - [Codex sidecar: agents/openai.yaml](#codex-sidecar-agentsopenaiyaml)
 - [Context budgets](#context-budgets)
 - [Sources](#sources)
@@ -24,7 +23,6 @@ All three tools follow the open Agent Skills spec (agentskills.io):
   1. At startup the tool reads only `name` and `description`, about 100 tokens per skill.
   2. When the skill triggers, it reads the SKILL.md body. Keep the body under 5000 tokens and 500 lines.
   3. It reads resource files only when the body points to them.
-- Reference files from SKILL.md with relative, forward-slash paths, and keep references one level deep.
 
 A skill that uses only this baseline works in all three tools, and also in claude.ai and the Claude API.
 
@@ -36,7 +34,7 @@ A skill that uses only this baseline works in all three tools, and also in claud
 | GitHub Copilot (cloud agent, CLI, VS Code) | `.github/skills/`, `.claude/skills/`, `.agents/skills/` | `~/.copilot/skills/`, `~/.agents/skills/` (VS Code local sessions also read `~/.claude/skills/`) |
 | OpenAI Codex | `.agents/skills/` in the start directory and each parent up to the repo root | `~/.agents/skills/` (admins: `/etc/codex/skills`) |
 
-**Covering all three from one copy:** keep the real folder in `.agents/skills/` (Codex and Copilot), and add a symlink in `.claude/skills/` (Claude Code). Use a relative symlink inside repos (`../../.agents/skills/<name>`) so it still works after someone clones the repo. Claude Code and Codex both follow symlinked skill folders.
+**Covering all three from one copy:** the layout in SKILL.md step 2 works because Claude Code and Codex both follow symlinked skill folders, and a relative symlink (`../../.agents/skills/<name>`) still works after someone clones the repo.
 
 **Caveats:**
 - Copilot also reads `.claude/skills/`, so it may list the same skill twice. The duplicate is harmless.
@@ -77,7 +75,7 @@ Use one of these only when the skill truly needs the behaviour. Each one makes t
 
 | Field | What it does | Supported by | Portable alternative |
 | --- | --- | --- | --- |
-| `disable-model-invocation: true` | User-only: the agent never auto-loads the skill. Use for actions with side effects, like deploying or sending | Claude Code, VS Code Copilot | Codex: `policy.allow_implicit_invocation: false` in `agents/openai.yaml`. Set both |
+| `disable-model-invocation: true` | User-only: the agent never auto-loads the skill | Claude Code, VS Code Copilot | Codex reads `agents/openai.yaml` instead (below) |
 | `user-invocable: false` | Hides the skill from the `/` menu; the agent can still load it | Claude Code, VS Code Copilot | None. Usually not worth it |
 | `argument-hint` | Autocomplete hint text, for example `[issue-number]` | Claude Code, VS Code Copilot | Describe the expected input in the body |
 | `context: fork` | Runs the skill in an isolated subagent | Claude Code, VS Code Copilot (experimental; needs `github.copilot.chat.skillTool.enabled`) | None |
@@ -87,8 +85,6 @@ Use one of these only when the skill truly needs the behaviour. Each one makes t
 
 ## Body syntax
 
-- **Paths:** write them relative to the skill directory, with forward slashes. In the body, say once: "paths are relative to the directory containing this SKILL.md".
-- **Link what you want loaded:** VS Code Copilot loads a resource only when the instructions reference it. Link every file you want the agent to use.
 - **Claude Code only:**
   - `$ARGUMENTS`, `$0`, `$name`
   - `${CLAUDE_SKILL_DIR}`, `${CLAUDE_PROJECT_DIR}`
@@ -97,15 +93,6 @@ Use one of these only when the skill truly needs the behaviour. Each one makes t
 
   Other tools see these as literal text. If a skill needs one of them, also write the instruction in plain words. For example, add "the user's request is the argument" next to `$ARGUMENTS`.
 - **Copilot only:** `#file:` references. Use normal Markdown links instead.
-- **MCP tools:** refer to them by their fully qualified name (`ServerName:tool_name`). Naming conventions vary between tools, so also name the server in prose.
-
-## Invocation
-
-| Tool | Explicit | Automatic |
-| --- | --- | --- |
-| Claude Code | `/<name> [args]` | When the request matches `description` |
-| Copilot | `/<name> [text]`. In VS Code, `/skills` opens the skills menu | When the request matches `description` |
-| Codex | `$<name>`, or pick from `/skills` | When the request matches `description`, unless `allow_implicit_invocation: false` |
 
 ## Codex sidecar: agents/openai.yaml
 
@@ -130,13 +117,12 @@ dependencies:
       url: "https://developers.openai.com/mcp"
 ```
 
-Add it when a skill should be user-only (mirroring `disable-model-invocation`) or depends on an MCP server. Otherwise it's optional.
+Add it when a skill should be user-only, or when it depends on an MCP server.
 
 ## Context budgets
 
 - **Claude Code:** the skill list gets about 1% of the context window, capped at 1536 chars per entry. When over budget, it drops descriptions of the least-used skills first. After compaction it re-attaches the first 5000 tokens of each invoked skill, with 25000 tokens shared across all skills.
 - **Codex:** the skill list gets 2% of the context window (8000 chars when the window size is unknown). It shortens descriptions first and may leave skills out.
-- **What this means:** put the most important trigger words at the start of the description, and the most important instructions at the start of the body.
 
 ## Sources
 

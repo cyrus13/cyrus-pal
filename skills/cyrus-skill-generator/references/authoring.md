@@ -19,7 +19,7 @@ How to write a skill's content. This combines the Agent Skills spec, Anthropic's
 - **Context is shared and limited.** Every token in SKILL.md competes with the user's code and conversation. Assume the agent is already capable, and for each paragraph ask: "Would the agent get this wrong without it?"
 - **One skill, one job.** If a skill needs "and" to describe it, consider splitting it.
 - **Write instructions, not documentation.** Use imperative steps with explicit inputs and outputs. Write for the agent, not for a human reader.
-- **Start from real failures.** The best content corrects what the agent actually got wrong without the skill. See [evaluation.md](evaluation.md).
+- **Start from real failures.** The best content corrects what the agent actually got wrong without the skill. The baseline run in the evaluation loop shows you what those are.
 - **Keep the most important content first.** Tools truncate descriptions, and they keep only the start of the body after compaction.
 
 ## Writing the description
@@ -30,8 +30,9 @@ Tools pick a skill using its description alone, so it matters more than any othe
 - **Third person.** Write "Processes Excel files...", not "I can help..." or "You can use this to...".
 - **Front-load the trigger words.** Include the nouns and verbs users actually type: file types, tool names, task names.
 - **Be specific about scope.** Mention a near miss it should not cover if confusion is likely ("Not for X; use Y").
-- **Limits:** 1024 characters, no angle brackets, one paragraph.
+- **One paragraph.** The validator checks the length and character limits.
 - **Don't repeat "when to use" in the body.** The body loads only after the skill triggers, so the agent has already decided by then.
+- **Explicit skills:** the description no longer decides loading, but menus still show it, so keep it a clear summary.
 
 Good:
 > Extracts text and tables from PDF files, fills PDF forms, and merges multiple PDFs. Use when working with PDF documents or when the user mentions PDFs, forms, or document extraction.
@@ -56,7 +57,7 @@ Other rules:
 - **Use consistent terms.** Pick one word for each concept ("endpoint", not a mix of endpoint, route and URL).
 - **Avoid time-sensitive wording.** Don't write "until August, use the old API". If you need history, put it in a collapsed "Old patterns" section.
 - **Name what must be installed.** List required packages and CLIs, and never assume they're present.
-- **MCP tools:** use fully qualified names (`ServerName:tool_name`).
+- **MCP tools:** use fully qualified names (`ServerName:tool_name`). Naming conventions vary between tools, so also name the server in plain words.
 
 ## Degrees of freedom
 
@@ -72,7 +73,17 @@ Think of a narrow bridge with cliffs on both sides versus an open field: the nar
 
 ## Progressive disclosure patterns
 
-Keep SKILL.md under 500 lines (aim for under 200), and use it as a table of contents. Three ways to split content out:
+Use SKILL.md as a table of contents, and aim for a body under 200 lines. The validator checks the hard limits from the spec. Put each kind of content where it costs the least context:
+
+| Content | Where it goes | When it loads |
+| --- | --- | --- |
+| What the skill does, when to use it, trigger words | `description` | Always, in every session |
+| Core workflow, defaults, gotchas | SKILL.md body | When the skill triggers |
+| Detailed docs, schemas, domain variants, long examples | `references/*.md` | Only when SKILL.md says to read them |
+| Steps that must be exact, fragile steps, validation | `scripts/` | Run, not read; only the output uses context |
+| Templates, boilerplate, images, data files | `assets/` | Used in the output, rarely read |
+
+Three ways to split content out:
 
 1. **Overview plus references:** SKILL.md has the quick start, with pointers like "For the full API, read `references/api.md`".
 2. **By domain or variant:** one reference file per domain (`references/aws.md`, `references/gcp.md`). SKILL.md says which to read, so the agent loads only one.
@@ -80,7 +91,10 @@ Keep SKILL.md under 500 lines (aim for under 200), and use it as a table of cont
 
 Rules:
 
+- **Link every file the agent should use**, from SKILL.md, with relative forward-slash paths. VS Code Copilot loads only the files the instructions reference.
+- **Make each read conditional.** Say *when* to read each reference ("read X before Y", "only if Z"). A bare "see X" makes the agent load it every time.
 - **One level deep.** SKILL.md links to reference files, and reference files don't send the agent to further reference files. Agents read chained references only partly, for example with `head`.
+- **One home per rule.** State each rule in one file and point to it from the others. Copies cost context every time and drift apart.
 - **Add a "Contents" list at the top of any reference file longer than 100 lines.** Agents often preview a file before reading the rest.
 - **Keep each reference file to one topic.** Smaller files cost less context when loaded.
 - **Large lookup data:** keep it in `assets/` or `references/`, and tell the agent to search it (grep) rather than read all of it.
@@ -96,6 +110,7 @@ Add a script when the agent would otherwise rewrite the same code each time, whe
 - **Plan, validate, execute** for bulk or destructive work: the agent writes a plan file, a script validates it, and only then does the agent apply it.
 - **Portability.** Prefer Python 3 standard library or POSIX sh. Document any other dependencies in SKILL.md and in `compatibility`. Use forward-slash paths. Don't rely on tool-specific environment variables.
 - **Make scripts self-locating.** Resolve sibling files relative to the script itself (in Python, `Path(__file__).parent`), not the current working directory.
+- **Share rules between scripts through one helper module** inside the skill (for example `scripts/skill_rules.py`), instead of copying constants into each script.
 
 ## Trace logging
 

@@ -18,6 +18,14 @@ Builds skills that follow the open Agent Skills spec and load cleanly in Claude 
 
 All paths below are relative to this skill's directory, meaning the folder that contains this SKILL.md. When you run a script, pass that directory's absolute path, for example `python3 <skill-dir>/scripts/validate_skill.py <target-skill-dir>`.
 
+Read a reference file only when a step below says so:
+
+| File | Read it when |
+| --- | --- |
+| [references/authoring.md](references/authoring.md) | Before writing or rewriting a skill's description, body or resources (steps 3 and 5) |
+| [references/evaluation.md](references/evaluation.md) | Before running the evals (step 7) |
+| [references/compatibility.md](references/compatibility.md) | Only if you're adding a non-spec field or tool-specific syntax, placing a skill outside the locations in step 2, or working out why a tool doesn't load a skill |
+
 ## Workflow
 
 Copy this checklist into your reply and tick items off as you go:
@@ -37,7 +45,7 @@ Copy this checklist into your reply and tick items off as you go:
 
 Always ask these three questions in a single round, even if the conversation already hints at the answers. If it does, offer those answers as the defaults to confirm. Use the tool's structured question UI if it has one.
 
-1. **Name.** Suggest one: `cyrus-` followed by a gerund or a clear action, for example `cyrus-reviewing-prs`. The rules: lowercase letters, digits and single hyphens; 64 characters or fewer; never `claude` or `anthropic`. Avoid vague words like `helper`, `utils` or `tools`.
+1. **Name.** Suggest one: `cyrus-` followed by a gerund or a clear action, for example `cyrus-reviewing-prs`. Avoid vague words like `helper`, `utils` or `tools`. The scripts enforce the format rules.
 2. **Invocation.** Offer three options:
    - **Implicit** (the default): the agent loads the skill when a request matches its description, and the user can also invoke it by name.
    - **Explicit**: the skill runs only when the user invokes it by name. Recommend this for anything with side effects, such as deploying, sending, deleting or publishing.
@@ -62,7 +70,7 @@ In the same round, ask for anything else that's still missing, again with a sugg
 
 **Platforms** change three things:
 
-- **Features.** Claude Code-only syntax and fields (argument substitution, skill-directory variables, `!` shell injection, `context: fork`, `paths`) are allowed only when Claude Code is the *only* target. If claude.ai / API is a target, use spec fields only.
+- **Features.** Use only spec fields and portable syntax, unless every target supports the extra feature. Claude Code-only features are fine when Claude Code is the only target. If claude.ai / API is a target, use spec fields only.
 - **Location.** In the cyrus-pal repo (the git root or the `origin` remote is named `cyrus-pal`), always use `skills/<name>/`. Anywhere else, ask whether this is a project skill or a personal one:
 
   | Targets | Project | Personal |
@@ -72,21 +80,9 @@ In the same round, ask for anything else that's still missing, again with a sugg
 
 - **Testing.** Test the skill on every target platform in step 7.
 
-The details for each tool are in [references/compatibility.md](references/compatibility.md).
-
 ### 3. Plan the contents
 
-Keep SKILL.md as a short table of contents and move detail into files that load only when needed:
-
-| Content | Where it goes | When it loads |
-| --- | --- | --- |
-| What the skill does, when to use it, trigger words | `description` | Always, in every session |
-| Core workflow, defaults, gotchas | SKILL.md body (under 500 lines; aim for under 200) | When the skill triggers |
-| Detailed docs, schemas, domain variants, long examples | `references/*.md` | Only when SKILL.md says to read them |
-| Steps that must be exact, fragile steps, validation | `scripts/` | Run, not read; only the output uses context |
-| Templates, boilerplate, images, data files | `assets/` | Used in the output, rarely read |
-
-Make the skill instructions-only unless you have a reason not to. Add a script when the agent would otherwise rewrite the same code each time, or when correctness has to be guaranteed. The riskier a step, the more exactly it should be scripted or spelled out. See [references/authoring.md](references/authoring.md).
+Read references/authoring.md now if you haven't yet. Decide what goes in the description, the body, `references/`, `scripts/` and `assets/`, using its "Progressive disclosure" table. Make the skill instructions-only unless a script is clearly needed.
 
 ### 4. Scaffold
 
@@ -97,27 +93,21 @@ python3 scripts/init_skill.py <name> --path <parent-dir> --description "<descrip
   [--resources scripts,references,assets] [--openai-yaml]
 ```
 
-What the script does:
+The script does the following:
 
-- Adds the `cyrus-` prefix if it's missing.
-- Writes the invocation fields for the chosen platforms.
-- Records your answers in `metadata` as `cyrus-platforms` and `cyrus-invocation`. The validator uses these to tailor its checks.
-- Creates SKILL.md from [assets/skill-template.md](assets/skill-template.md) and `evals/evals.json` from [assets/evals-template.json](assets/evals-template.json).
-- Creates the Codex file `agents/openai.yaml` from [assets/openai-yaml-template.yaml](assets/openai-yaml-template.yaml) when an explicit skill targets Codex, or when you pass `--openai-yaml`.
-- Exits with an error if the invocation mode isn't possible on a chosen platform, and never overwrites an existing folder.
+- Adds the `cyrus-` prefix.
+- Writes the invocation settings from step 2.
+- Records the answers in `metadata` as `cyrus-platforms` and `cyrus-invocation`.
+- Fills in [assets/skill-template.md](assets/skill-template.md), [assets/evals-template.json](assets/evals-template.json) and, when Codex needs it, [assets/openai-yaml-template.yaml](assets/openai-yaml-template.yaml).
 
-Create any `.claude/skills` symlink from step 2 yourself afterwards.
+It never overwrites an existing folder. Create any `.claude/skills` symlink from step 2 yourself afterwards.
 
 ### 5. Write SKILL.md and resources
 
-Follow [references/authoring.md](references/authoring.md). The essentials:
+Fill in every placeholder in the scaffold, following references/authoring.md. Two things that guide doesn't cover:
 
-- **Description:** third person. Say what the skill does and when to use it, and put the key trigger words first. Keep it to 1024 characters with no angle brackets. Every tool decides whether to load the skill from this field alone. For explicit skills it matters less, but it's still shown in menus.
-- **Body:** imperative steps with explicit inputs and outputs. Give one default plus a way out instead of a menu of options. Include only what the agent wouldn't already know.
-- **Resources:** link every resource file from SKILL.md, one level deep, using relative paths with forward slashes. For each script, say whether to run it or read it.
-- **Frontmatter:** use spec fields plus the invocation fields from step 2. Add any other tool-specific field only when the skill needs that behaviour and every target supports it, and tell the user what it costs. The extensions table in [references/compatibility.md](references/compatibility.md) lists the trade-offs.
-- **Trace (required):** keep the trace block the template puts right under the title, using the skill's name and its current `metadata.version`. Every script that gets run directly must print `[skill] <name> | scripts/<file>` to stderr as its first action. See "Trace logging" in [references/authoring.md](references/authoring.md).
-- **Keep the recorded answers current:** if the invocation mode or platforms change, update `cyrus-invocation` and `cyrus-platforms`.
+- **Frontmatter:** spec fields plus the invocation settings from step 2. If you add any other field, tell the user what it costs.
+- **Recorded answers:** if the invocation mode or platforms change, update `cyrus-invocation` and `cyrus-platforms`.
 
 ### 6. Validate
 
@@ -129,22 +119,14 @@ Fix every ERROR. Fix every WARN, or explain to the user why you're keeping it. R
 
 ### 7. Evaluate on every target platform
 
-You, the agent running this skill, run the tests. The user reviews the results and handles only what you can't run. Follow [references/evaluation.md](references/evaluation.md):
-
-1. Fill in `evals/evals.json` with trigger prompts and scenarios.
-2. Ask the user once for permission to run headless sessions. They use the user's accounts and cost tokens.
-3. For each target platform whose CLI is installed and signed in (`claude`, `codex`, `copilot`), run the prompts in fresh headless sessions inside a throwaway directory. Never pass flags that bypass permissions.
-4. Check whether the skill triggered by searching the output for its trace line. Grade each scenario against its `expected_behavior`.
-5. Give the user a short manual checklist for anything you couldn't run. That covers platforms without a CLI, and scenarios with real side effects (deploys, sends). Never run side-effect scenarios yourself.
-
-If the skill triggers too rarely or too often, rewrite the description. Wherever the agent struggled, rewrite that part of the body. Report the results per platform, and say which tests you ran, which the user ran, and which weren't run at all.
+Read references/evaluation.md and follow it. You run the tests in headless sessions, after asking the user once. The user reviews the results and does a manual checklist for whatever you can't or mustn't run, such as side effects or platforms without a CLI.
 
 ### 8. Register and hand off
 
 - **In cyrus-pal:** add a row to the skills index in the root `AGENTS.md`, then follow that file's working rules (a branch and a PR).
 - **Tell the user:**
   - where the skill lives
-  - how to invoke it on each target: `/<name>` in Claude Code and Copilot, `$<name>` in Codex
+  - how to invoke it on each target: `/<name>` in Claude Code and Copilot, `$<name>` (or the `/skills` picker) in Codex
   - the invocation mode, and any tool-specific fields you used
   - the evaluation results, per platform
 
@@ -154,4 +136,4 @@ If the skill triggers too rarely or too often, rewrite the description. Wherever
 2. Read SKILL.md and every file it links to.
 3. If `cyrus-invocation` or `cyrus-platforms` is missing, ask the questions in step 1 for the invocation mode and the platforms, then record the answers.
 4. Apply steps 2-3 and 5-8 to the change.
-5. Keep `name` unchanged, because renaming breaks existing slash commands. Bump `metadata.version`, and update the version in the trace line to match. If the skill has no trace block yet, add one.
+5. Keep `name` unchanged, because renaming breaks existing slash commands. Bump `metadata.version` and the trace line together, as described in "Trace logging" in references/authoring.md. If the skill has no trace block yet, add one.

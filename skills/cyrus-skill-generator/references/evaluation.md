@@ -114,7 +114,6 @@ Report to the user:
 - the trigger hit rate (for example, 3/3 should-trigger and 0/2 should-not)
 - which scenarios passed or failed, and why
 - what you changed in response
-
 - for each platform, who tested it: you (headless), the user (manual), or nobody yet
 - the manual checklist for the user, if anything is left
 

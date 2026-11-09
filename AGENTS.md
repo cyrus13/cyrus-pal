@@ -28,6 +28,6 @@ Keep this table in sync with `skills/`. Add, rename or remove a row in the same 
 
 - **Never commit straight to `main`.** Make a branch, push it, and open a PR against `main` (`gh pr create --base main`).
 - **One skill, one folder.** Don't share files across skill folders. If several skills need the same thing, raise it in the PR.
-- **Trace every skill.** Right under the title, each `SKILL.md` tells the agent to print `[skill] <name> v<version> | started` first and `[skill] <name> | finished` at the end. Each script prints `[skill] <name> | scripts/<file>` to stderr. `validate_skill.py` enforces this.
+- **Trace every skill.** Each skill, and each script it runs, prints a `[skill] <name>` line to the console. The format is defined under "Trace logging" in [skills/cyrus-skill-generator/references/authoring.md](skills/cyrus-skill-generator/references/authoring.md), and `validate_skill.py` enforces it.
 - **Descriptions matter.** A skill's frontmatter `description` decides when agents load it. Make it say what the skill does and when to use it.
 - **Update the maps.** When you add a new kind of tool (a new top-level folder), add it to "Where to look" here and to the layout section in [README.md](README.md).
