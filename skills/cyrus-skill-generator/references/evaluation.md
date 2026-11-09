@@ -1,15 +1,29 @@
 # Evaluating a skill
 
-Improve a skill based on what you observe it doing, not on guesses. No one test runner works across all three tools, so use the fixed eval file below with manual or headless runs.
+Improve a skill based on what you observe it doing, not on guesses. No one test runner works across all three tools, so use the fixed eval file below with headless runs, and fall back to manual runs where you can't run headless.
 
 ## Contents
 
+- [Who runs the tests](#who-runs-the-tests)
 - [Eval file](#eval-file)
 - [Loop](#loop)
 - [Trigger tests](#trigger-tests)
 - [Scenario tests](#scenario-tests)
 - [Running in each tool](#running-in-each-tool)
 - [Reading the results](#reading-the-results)
+
+## Who runs the tests
+
+| Who | What |
+| --- | --- |
+| **The agent** that wrote the skill (you) | Fills in the eval file, runs every trigger test and safe scenario headless on each target platform whose CLI is installed and signed in, grades the results and revises the skill |
+| **The user** | Approves the headless runs once (they use the user's accounts and cost tokens), reviews the report, and runs the manual checklist you give them |
+
+Leave these to the user as manual steps, and never run them yourself:
+
+- platforms whose CLI isn't installed or signed in
+- scenarios with real side effects (deploying, sending, deleting, publishing)
+- anything that needs an interactive UI, such as VS Code or the Copilot cloud agent
 
 ## Eval file
 
@@ -49,8 +63,10 @@ Useful split: one agent session writes the skill, and a separate fresh session u
 
 In a fresh session, for each prompt:
 
-- **`should_trigger`:** the skill should load without being named. Check that the tool shows the skill being used. For explicit skills (`cyrus-invocation: explicit`), reverse this: confirm the skill does **not** auto-load on these prompts.
+- **`should_trigger`:** the skill should load without being named. For explicit skills (`cyrus-invocation: explicit`), reverse this: confirm the skill does **not** auto-load on these prompts.
 - **`should_not_trigger`:** the skill should not load.
+
+**How to tell whether it triggered:** search the captured output for the skill's trace line, `[skill] <name>`. If the tool's own log shows the skill loading but the trace line is missing, count it as triggered. Then fix the trace block, since the skill should always announce itself.
 
 Fixes:
 
@@ -70,13 +86,24 @@ Invoke the skill explicitly (`/<name>` or `$<name>`) on each target platform rec
 
 At minimum, test in the tool the user uses most. Also test in the others when the skill relies on scripts, tool permissions or anything that behaves differently between tools.
 
-| Tool | Interactive | Headless (for scripted runs) |
+| Tool | Interactive (user) | Headless (agent) |
 | --- | --- | --- |
-| Claude Code | `claude`, then `/<name> ...` | `claude -p "<prompt>"` |
-| Codex | `codex`, then `$<name> ...` | `codex exec "<prompt>"` |
+| Claude Code | `claude`, then `/<name> ...` | `claude -p --output-format stream-json --verbose "<prompt>"` (records every message, not just the final one) |
+| Codex | `codex`, then `$<name> ...` | `codex exec --json "<prompt>"` |
 | Copilot CLI | `copilot`, then `/<name> ...` (run `/skills reload` after adding the skill) | `copilot -p "<prompt>"` |
 
-Headless flags change between versions, so check `--help` for each tool. Install the skill where each tool will find it first (see [compatibility.md](compatibility.md)).
+Headless flags change between versions, so check `--help` for each tool first. Capture both stdout and stderr (`2>&1`) so the trace lines are recorded.
+
+**Isolated setup:** run each headless session in a throwaway directory with the skill installed at project level. That way the user's personal skill folders stay untouched, and no earlier context leaks into the run:
+
+```bash
+T="$(mktemp -d)" && cd "$T" && git init -q
+mkdir -p .claude/skills .agents/skills
+ln -s "<absolute-skill-dir>" ".claude/skills/<name>"   # Claude Code (Copilot also reads this)
+ln -s "<absolute-skill-dir>" ".agents/skills/<name>"   # Codex + Copilot
+```
+
+Keep the default permission settings. Never pass flags that skip approvals or the sandbox, so a run can't make changes outside what's allowed. Put any input files a scenario needs into the directory first.
 
 If the skill will be used with smaller or faster models, test with one of those too. They need more explicit guidance, while large models need less explanation.
 
@@ -88,4 +115,7 @@ Report to the user:
 - which scenarios passed or failed, and why
 - what you changed in response
 
-Don't claim cross-tool compatibility for a tool you didn't test. Say which tools you actually ran.
+- for each platform, who tested it: you (headless), the user (manual), or nobody yet
+- the manual checklist for the user, if anything is left
+
+Don't claim cross-tool compatibility for a tool nobody tested.

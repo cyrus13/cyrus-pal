@@ -40,6 +40,7 @@ INVOCATIONS = ("implicit", "explicit", "background")
 # Platforms that read the frontmatter invocation fields.
 FRONTMATTER_INVOCATION_PLATFORMS = {"claude-code", "copilot"}
 
+TRACE = "[skill] cyrus-skill-generator | scripts/init_skill.py"
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 PLACEHOLDER_DESCRIPTION = (
     "TODO: Third-person summary of what this skill does. "
@@ -121,6 +122,7 @@ def main():
     parser.add_argument("--resources", default="", help="comma-separated: scripts,references,assets")
     parser.add_argument("--openai-yaml", action="store_true", help="always create agents/openai.yaml for Codex")
     args = parser.parse_args()
+    print(TRACE, file=sys.stderr)
 
     name = normalise_name(args.name)
     problem = check_name(name)

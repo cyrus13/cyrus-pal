@@ -14,7 +14,7 @@ Checks are tailored to the skill's recorded choices in metadata:
   cyrus-platforms:  space-separated targets (claude-code copilot codex claude-api)
   cyrus-invocation: implicit | explicit | background
 Without them, all of claude-code, copilot and codex are assumed.
---third-party skips the cyrus conventions (prefix, recorded choices).
+--third-party skips the cyrus conventions (prefix, recorded choices, trace lines).
 
 Prints ERROR / WARN lines. Exit code: 1 if any ERROR (or any WARN with
 --strict), otherwise 0. Standard library only.
@@ -36,6 +36,9 @@ CHARS_PER_TOKEN = 4  # rough English average; good enough for a size warning
 CLAUDE_LISTING_CAP = 1536  # Claude Code truncates description + when_to_use here
 TOC_REQUIRED_LINES = 100  # Anthropic guidance: add a contents list past this length
 MIN_DESCRIPTION_LEN = 40  # shorter descriptions are almost always too vague to trigger
+TRACE_MAX_LINE = 15  # the trace instruction must come before the workflow, so the agent reads it first
+TRACE = "[skill] cyrus-skill-generator | scripts/validate_skill.py"
+SCRIPT_SUFFIXES = {".py", ".sh", ".bash", ".js", ".mjs", ".ts", ".ps1"}
 
 PREFIX = "cyrus-"
 RESERVED_WORDS = ("claude", "anthropic")
@@ -571,6 +574,44 @@ def check_invocation(skill_dir, fm, invocation, targets, report):
             report.error("agents/openai.yaml disables implicit invocation, contradicting cyrus-invocation: implicit")
 
 
+def check_trace(skill_dir, fm, body, report):
+    """cyrus convention: skills and their scripts print a trace line identifying themselves."""
+    name = as_text(fm.get("name"))
+    if not name:
+        return
+    meta = fm.get("metadata") if isinstance(fm.get("metadata"), dict) else {}
+    version = meta.get("version")
+    expected = f"[skill] {name}{' v' + version if version else ''} | started"
+    started = re.search(r"\[skill\] " + re.escape(name) + r"(?: v([^\s|`]+))? \| started", body)
+    if not started:
+        report.error(f"SKILL.md must tell the agent to print the trace line '{expected}' first "
+                     "(copy the trace block from the skill template)")
+    else:
+        line = body[: started.start()].count("\n") + 1
+        if line > TRACE_MAX_LINE:
+            report.warn(f"trace instruction is on body line {line}; move it right under the title so it is read first")
+        traced_version = started.group(1)
+        if version and traced_version and traced_version != version:
+            report.error(f"trace line says v{traced_version} but metadata.version is {version}; update the trace line")
+        elif version and not traced_version:
+            report.warn(f"trace line should include the version: '{expected}'")
+    if not re.search(r"\[skill\] " + re.escape(name) + r" \| finished", body):
+        report.warn(f"SKILL.md should also tell the agent to print '[skill] {name} | finished' when done")
+
+    scripts_dir = skill_dir / "scripts"
+    if scripts_dir.is_dir():
+        for path, rel in iter_skill_files(skill_dir):
+            if rel.parts[0] != "scripts" or path.suffix.lower() not in SCRIPT_SUFFIXES:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if f"[skill] {name}" not in text:
+                report.warn(f"{rel} does not print its trace line '[skill] {name} | {rel.as_posix()}' to stderr "
+                            "(fine for helper modules that are only imported)")
+
+
 def check_evals(skill_dir, report, invocation):
     path = skill_dir / "evals" / "evals.json"
     if not path.exists():
@@ -638,6 +679,8 @@ def validate(skill_dir, conventions=True):
     check_resources(skill_dir, body, report)
     check_invocation(skill_dir, fm, invocation, targets, report)
     check_evals(skill_dir, report, invocation)
+    if conventions:
+        check_trace(skill_dir, fm, body, report)
     report.targets, report.invocation = targets, invocation
     return report
 
@@ -647,8 +690,9 @@ def main():
     parser.add_argument("skill_dir", help="path to the skill folder (the one containing SKILL.md)")
     parser.add_argument("--strict", action="store_true", help="treat warnings as errors")
     parser.add_argument("--third-party", "--no-prefix-check", dest="third_party", action="store_true",
-                        help="skip cyrus conventions (cyrus- prefix, recorded platforms/invocation)")
+                        help="skip cyrus conventions (cyrus- prefix, recorded platforms/invocation, trace lines)")
     args = parser.parse_args()
+    print(TRACE, file=sys.stderr)
 
     skill_dir = Path(args.skill_dir).expanduser()
     report = validate(skill_dir, conventions=not args.third_party)

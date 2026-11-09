@@ -61,6 +61,16 @@ Use the generator: in Claude Code or Copilot type `/cyrus-skill-generator`, and 
 
 It then writes the right settings for each platform and records your choices in the skill's `metadata` as `cyrus-invocation` and `cyrus-platforms`, so the validator can tailor its checks.
 
+Every cyrus skill prints **trace lines**, so the console shows which skill (and which version) is running:
+
+```
+[skill] cyrus-skill-generator v1.2.0 | started
+[skill] cyrus-skill-generator | scripts/validate_skill.py   # each script, on stderr
+[skill] cyrus-skill-generator | finished
+```
+
+The generator also tests the skills it creates. It runs each one in a fresh headless session on every target platform whose CLI you have installed, and detects whether the skill triggered from its trace line. It asks before these runs, and leaves anything with side effects, or any platform it can't run, to you as a short checklist.
+
 To validate a skill by hand:
 
 ```bash

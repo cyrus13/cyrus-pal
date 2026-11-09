@@ -10,6 +10,7 @@ How to write a skill's content. This combines the Agent Skills spec, Anthropic's
 - [Degrees of freedom](#degrees-of-freedom)
 - [Progressive disclosure patterns](#progressive-disclosure-patterns)
 - [Scripts](#scripts)
+- [Trace logging](#trace-logging)
 - [Assets](#assets)
 - [Anti-patterns](#anti-patterns)
 
@@ -95,6 +96,20 @@ Add a script when the agent would otherwise rewrite the same code each time, whe
 - **Plan, validate, execute** for bulk or destructive work: the agent writes a plan file, a script validates it, and only then does the agent apply it.
 - **Portability.** Prefer Python 3 standard library or POSIX sh. Document any other dependencies in SKILL.md and in `compatibility`. Use forward-slash paths. Don't rely on tool-specific environment variables.
 - **Make scripts self-locating.** Resolve sibling files relative to the script itself (in Python, `Path(__file__).parent`), not the current working directory.
+
+## Trace logging
+
+Every cyrus skill prints trace lines, so the console shows which skill ran and which copy of it. That matters when the same skill is installed in more than one place. Evals also use these lines to detect whether a skill triggered.
+
+- **In SKILL.md:** the template puts a trace block right under the title. Keep it there. It has to be among the first lines so the agent reads it before anything else and it survives truncation. It asks the agent to print:
+  - `[skill] <name> v<version> | started` before doing anything else
+  - `[skill] <name> | finished` at the end, or `[skill] <name> | stopped: <reason>` if the workflow stops early
+- **In scripts:** every script that gets run directly prints `[skill] <name> | scripts/<file>` to stderr as its first action. Using stderr keeps stdout clean for output that other tools parse.
+  - Python: `print("[skill] cyrus-example | scripts/build.py", file=sys.stderr)`
+  - Bash: `echo "[skill] cyrus-example | scripts/build.sh" >&2`
+  - Helper modules that are only imported don't need a trace.
+- **Keep the version current.** When you bump `metadata.version`, update the trace line too. The validator checks that they match.
+- **Why an instruction and not a hook:** Claude Code can run hooks when a skill loads, but Copilot and Codex can't, so an instruction in the body is the only option that works everywhere. Models follow it reliably but not with certainty, while script traces always print. If a trace is missing, treat that as a bug in the skill and fix the body.
 
 ## Assets
 

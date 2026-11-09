@@ -5,12 +5,14 @@ license: MIT
 compatibility: The bundled scripts need Python 3.8+ and use only the standard library. Targets Claude Code, GitHub Copilot and OpenAI Codex.
 metadata:
   author: cyrus13
-  version: "1.1.0"
+  version: "1.2.0"
   cyrus-platforms: "claude-code copilot codex"
   cyrus-invocation: "implicit"
 ---
 
 # Cyrus Skill Generator
+
+**Trace (do this first):** before anything else, print this exact line on its own: `[skill] cyrus-skill-generator v1.2.0 | started`. When the workflow ends, print `[skill] cyrus-skill-generator | finished`. If you stop early, print `[skill] cyrus-skill-generator | stopped: <reason>` instead.
 
 Builds skills that follow the open Agent Skills spec and load cleanly in Claude Code, GitHub Copilot and OpenAI Codex.
 
@@ -114,6 +116,7 @@ Follow [references/authoring.md](references/authoring.md). The essentials:
 - **Body:** imperative steps with explicit inputs and outputs. Give one default plus a way out instead of a menu of options. Include only what the agent wouldn't already know.
 - **Resources:** link every resource file from SKILL.md, one level deep, using relative paths with forward slashes. For each script, say whether to run it or read it.
 - **Frontmatter:** use spec fields plus the invocation fields from step 2. Add any other tool-specific field only when the skill needs that behaviour and every target supports it, and tell the user what it costs. The extensions table in [references/compatibility.md](references/compatibility.md) lists the trade-offs.
+- **Trace (required):** keep the trace block the template puts right under the title, using the skill's name and its current `metadata.version`. Every script that gets run directly must print `[skill] <name> | scripts/<file>` to stderr as its first action. See "Trace logging" in [references/authoring.md](references/authoring.md).
 - **Keep the recorded answers current:** if the invocation mode or platforms change, update `cyrus-invocation` and `cyrus-platforms`.
 
 ### 6. Validate
@@ -126,7 +129,15 @@ Fix every ERROR. Fix every WARN, or explain to the user why you're keeping it. R
 
 ### 7. Evaluate on every target platform
 
-Fill in `evals/evals.json` with trigger prompts and scenarios, then test as described in [references/evaluation.md](references/evaluation.md). On each target platform, run at least one realistic task in a fresh session. For implicit skills, also run a trigger test. If the skill triggers too rarely or too often, rewrite the description. Wherever the agent struggled, rewrite that part of the body. Report which platforms you actually tested.
+You, the agent running this skill, run the tests. The user reviews the results and handles only what you can't run. Follow [references/evaluation.md](references/evaluation.md):
+
+1. Fill in `evals/evals.json` with trigger prompts and scenarios.
+2. Ask the user once for permission to run headless sessions. They use the user's accounts and cost tokens.
+3. For each target platform whose CLI is installed and signed in (`claude`, `codex`, `copilot`), run the prompts in fresh headless sessions inside a throwaway directory. Never pass flags that bypass permissions.
+4. Check whether the skill triggered by searching the output for its trace line. Grade each scenario against its `expected_behavior`.
+5. Give the user a short manual checklist for anything you couldn't run. That covers platforms without a CLI, and scenarios with real side effects (deploys, sends). Never run side-effect scenarios yourself.
+
+If the skill triggers too rarely or too often, rewrite the description. Wherever the agent struggled, rewrite that part of the body. Report the results per platform, and say which tests you ran, which the user ran, and which weren't run at all.
 
 ### 8. Register and hand off
 
@@ -143,4 +154,4 @@ Fill in `evals/evals.json` with trigger prompts and scenarios, then test as desc
 2. Read SKILL.md and every file it links to.
 3. If `cyrus-invocation` or `cyrus-platforms` is missing, ask the questions in step 1 for the invocation mode and the platforms, then record the answers.
 4. Apply steps 2-3 and 5-8 to the change.
-5. Keep `name` unchanged, because renaming breaks existing slash commands. Bump `metadata.version`.
+5. Keep `name` unchanged, because renaming breaks existing slash commands. Bump `metadata.version`, and update the version in the trace line to match. If the skill has no trace block yet, add one.

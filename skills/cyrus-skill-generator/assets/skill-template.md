@@ -11,6 +11,8 @@ metadata:
 
 # {{title}}
 
+**Trace (do this first):** before anything else, print this exact line on its own: `[skill] {{name}} v0.1.0 | started`. When the workflow ends, print `[skill] {{name}} | finished`. If you stop early, print `[skill] {{name}} | stopped: <reason>` instead.
+
 TODO: One or two sentences on what this skill produces. Don't explain when to use it here. The description already covers that, and this body loads only after the skill triggers.
 
 Paths in this skill are relative to the directory containing this SKILL.md.
